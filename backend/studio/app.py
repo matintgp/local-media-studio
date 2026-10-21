@@ -9,17 +9,21 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from .core import KINDS, Store, canonical_json, config, ensure_space, secure_path, uid
 from .engines import Comfy, Wan, EngineError, UnknownSubmission
 from .media import MediaError, generate_demo, probe, render_composition
+from .providers import Assistant, ChatIn, ProviderConfig
 
 CONFIG=config()
 STORE=Store(CONFIG['root'])
 TEMPLATE=Path(__file__).resolve().parents[2]/'examples'/'recipes'/'z-image-comfy-api.json'
 COMFY=Comfy(CONFIG['comfy'],json.loads(TEMPLATE.read_text(encoding='utf-8'))) if TEMPLATE.exists() else None
 WAN=Wan(CONFIG['wan'],STORE.root/'wan-session.json')
+ASSISTANT=Assistant(STORE.root)
 
 MODELS={
     'image':{'engine':'comfy','model':'z-image-turbo-nunchaku'},
@@ -226,6 +230,14 @@ async def lifespan(app):
             await asyncio.gather(t,e,return_exceptions=True)
 
 app=FastAPI(title='Local Media Studio',lifespan=lifespan)
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request:Request,exc:RequestValidationError):
+    # Pydantic model validators can include the entire config input (including keys).
+    if request.url.path.startswith('/api/assistant/'):
+        return JSONResponse(status_code=422,content={'detail':'Invalid assistant configuration or message. Check provider URL, model and field limits.'})
+    from fastapi.exception_handlers import request_validation_exception_handler
+    return await request_validation_exception_handler(request,exc)
 
 @app.middleware('http')
 async def boundaries(request:Request, call_next):
@@ -492,6 +504,20 @@ async def events(after:int=0):
                 cursor=r['seq'];yield f'id: {cursor}\ndata: {r["event"]}\n\n'
             await asyncio.sleep(1)
     return StreamingResponse(stream(),media_type='text/event-stream')
+
+@app.get('/api/assistant/config')
+async def assistant_config():return ASSISTANT.public()
+
+@app.put('/api/assistant/config')
+async def configure_assistant(inp:ProviderConfig):
+    if ASSISTANT.lock.locked():raise HTTPException(409,'Wait for the current assistant request')
+    return ASSISTANT.configure(inp)
+
+@app.post('/api/assistant/chat')
+async def assistant_chat(inp:ChatIn):
+    project(inp.project_id)
+    try:return await ASSISTANT.suggest(inp)
+    except ValueError:raise HTTPException(422,'Assistant unavailable or invalid response. Check provider, model, credentials and remote consent. No jobs were submitted.')
 
 FRONT=Path(__file__).resolve().parents[2]/'frontend'/'dist'
 if FRONT.is_dir():

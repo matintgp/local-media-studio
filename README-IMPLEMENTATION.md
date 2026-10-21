@@ -70,3 +70,8 @@ Run browser tests against a separate mock server/data root: STUDIO_E2E_URL selec
 ## Limits
 
 One user, loopback-only, engines managed separately. Direct engine UI jobs can race an admission check; the app pauses further admission when conflicts are observed. Composer is a clip/track form with previews, not a mixed live timeline. Workflows support ordered earlier-step binding, not a general node editor. No automatic transcription, lip sync, chatbot or API provider is enabled. The provider interface is reserved for future work. Generated video artifacts and Persian pronunciation need human review.
+
+
+## تایم‌لاین و دستیار
+
+کنترل‌های تعاملی تدوین و اتصال اختیاری Ollama / OpenAI اضافه شده‌اند. برای روش استفاده، محدودیت پیش‌نمایش و نگهداری کلید، [راهنمای تایم‌لاین و دستیار](docs/TIMELINE_ASSISTANT.md) را ببینید. اتصال زندهٔ چت‌بات به مدل موجود یا کلید API شما نیاز دارد.

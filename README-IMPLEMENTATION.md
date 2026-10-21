@@ -1,49 +1,72 @@
-# Local Media Studio — CPU MVP implementation
+# Running Local Media Studio
 
-The existing README and specifications remain intact. The application lives in `backend/studio` (FastAPI and SQLite) and `frontend` (React/TypeScript/Vite). It has a clearly labelled **MOCK / DEMO** CPU-only mode. **Real GPU outputs have not been verified** in the cloud. No engines, model weights, CUDA, Torch or new runtime are installed or downloaded.
+First locally tested version, kept on a feature branch. GPU generation runs in the existing engines. The app installs no models, GPU packages or browsers.
 
-## Linux/CPU smoke test (no models)
+## Windows setup
 
-```sh
-cd frontend && npm install && npm run build && cd ..
-python -m venv .venv
-. .venv/bin/activate
-pip install -r backend/requirements-dev.txt
-mkdir -p /tmp/media-studio-demo
-STUDIO_DATA_ROOT=/tmp/media-studio-demo STUDIO_MODE=mock STUDIO_RESERVE_GIB=0 PYTHONPATH=backend python -m uvicorn studio.app:app --host 127.0.0.1 --port 8787 --workers 1
-# open http://127.0.0.1:8787
-STUDIO_DATA_ROOT=/tmp/media-studio-tests PYTHONPATH=backend pytest -q backend/tests
-```
-
-FFmpeg/ffprobe are required for synthetic video/audio and MP4 export; install only the operating system's lightweight FFmpeg binary through your normal reviewed package manager. The app **never** installs or launches it. All sample media are generated locally from FFmpeg synthetic sources and are labelled DEMO.
-
-## Windows / PowerShell on approved B-drive
-
-Run `scripts/check-windows.ps1` first. Do not change Pinokio engines. Review/approve the data root `B:\MediaStudio` and create it independently if not present; the app refuses to fall back to C:. Use Python 3.11 and Node 22 in a dedicated application environment. From repository root:
+Prerequisites: installed Python 3.12, uv, Node/npm and FFmpeg/ffprobe. Use an approved data volume; do not install into an engine environment.
 
 ```powershell
-$env:npm_config_cache = 'B:\MediaStudio\npm-cache'
-cd frontend
-npm install
-npm run typecheck
-npm run build
-cd ..
-py -3.11 -m venv B:\MediaStudio\studio-venv
-& 'B:\MediaStudio\studio-venv\Scripts\python.exe' -m pip install -r backend\requirements.txt
-.\scripts\run-windows.ps1 -Mode mock -DataRoot 'B:\MediaStudio'
-# After review, real mode (no engine changes):
-.\scripts\run-windows.ps1 -Mode real -DataRoot 'B:\MediaStudio'
+New-Item -ItemType Directory -Path 'B:\MediaStudio' -Force
+.\scripts\install-windows.ps1 -DataRoot 'B:\MediaStudio'
 ```
 
-Set `STUDIO_COMFY_URL`, `STUDIO_WAN_URL`, `STUDIO_COMFY_OUTPUT_ROOT`, `STUDIO_FFMPEG`, `STUDIO_FFPROBE`, `STUDIO_RESERVE_GIB` in the process environment for site-specific reviewed paths. Default endpoints are loopback 8188 and 7866/mcp. Only run one backend worker. Database `B:\MediaStudio\studio.sqlite3` is automatically migrated to schema v1. Stop the app and copy the DB before upgrades. Rollback stops this app, restores its database from backup and removes only app-owned files if explicitly desired; never delete engine source assets or models.
+This explicitly installs the app-only .venv and builds the frontend using lockfiles. Caches/temp stay under the selected data root. `scripts/check-windows.ps1` is a read-only prerequisite check.
 
-## Behavior / limitations (verify before GPU use)
+Create an ignored `studio.local.json` in the data root, replacing these generic engine paths with actual approved roots:
 
-- SQLite persists projects, media references, jobs, immutable request IDs/payload hashes, output provenance, workflows, exports and event cursor. One transactional GPU admission slot; unknown external state blocks dispatch and never triggers blind resubmission.
-- ComfyUI uses vetted Z-Image API graph, `/object_info` model validation, `/queue`, `/history`, `/prompt`. WanGP uses Streamable HTTP MCP initialize, session headers, JSON/SSE decoding, tools and job polling. **These are transport implementations requiring live protocol verification**; missing availability or uncertain activity blocks generation. No mock fallback in real mode.
-- Security: loopback host/origin checks, ID-based local media, read-root containment and path canonicalization, bounded imports/disk reserve, no shell execution, no remote fonts/telemetry. Single-user local app; do not expose it publicly.
-- Composer renders actual normalized video clips with CPU FFmpeg H.264/AAC, trims, sequences, music/narration lanes with offsets, gain, fades and sidechain ducking, and probes export. SRT subtitle muxing is experimental; VTT is rejected explicitly.
+```json
+{
+  "STUDIO_COMFY_OUTPUT_ROOT": "B:/ExistingComfy/output",
+  "STUDIO_WAN_OUTPUT_ROOT": "B:/ExistingWan/outputs",
+  "STUDIO_COMFY_URL": "http://127.0.0.1:8188",
+  "STUDIO_WAN_URL": "http://127.0.0.1:7866/mcp",
+  "STUDIO_RESERVE_GIB": "60"
+}
+```
 
-### Known incomplete integration gates
+Use a stricter reserve if an existing storage budget requires it. STUDIO_FFMPEG/STUDIO_FFPROBE may specify existing executables. Never commit this configuration, databases, sessions or media.
 
-WanGP external queue discovery and upload-ticket flow need owner-machine schema validation; Comfy output references require configured output root. Virtual `@outputs` Wan media need authorized download/materialization before playing in the gallery or using the local composer. Comfy WebSocket progress and safe owned-running cancellation are not implemented (polling only); unknown status is fail-closed. Cross-process scheduler ownership currently requires `--workers 1` (no process-level leader election). Multi-step workflow execution queues typed steps but does not yet bind outputs/dependency DAG or resume partially successful steps. Composer UI provides shot order and audio offsets but full source trims are API-only. These are **MVP gaps**, not confirmed working features. Reconciliation may require manual review. No hardware test has been run.
+```powershell
+# Start both existing engines separately in Pinokio, then:
+.\scripts\run-windows.ps1 -Mode real -DataRoot 'B:\MediaStudio'
+# Synthetic CPU-only demonstration:
+.\scripts\run-windows.ps1 -Mode mock -DataRoot 'B:\MediaStudio'
+```
+
+Open http://127.0.0.1:8787. Use one backend worker per data root. A second runner is rejected by the OS lock. Stop with Ctrl+C or the local Pinokio entry. Stopping the app does not cancel native engine jobs; reconnect with the same data root to track them.
+
+## استفاده
+
+۱. پروژه بسازید. در «ساخت مدیا» نوع خروجی را انتخاب، متن و ورودی را وارد و به صف اضافه کنید. موتور و مدل باید از قبل نصب باشند.
+
+۲. در کتابخانه، تصویر را برای ویدیو یا ویدیو را برای صدای محیط دوباره استفاده کنید. Import یک نسخه در داده‌های اپ می‌سازد؛ خروجی خود موتورها با مرجع ثبت می‌شود و کپی حجیم اضافه ندارد.
+
+۳. در گردش‌کار، مراحل را مرتب کنید. تصویر پیش از ویدیو و ویدیو پیش از صدای محیط، ورودی مرحلهٔ بعد را تأمین می‌کند. اجرای مجدد مراحل موفق را حفظ می‌کند؛ وضعیت هر کار در صف دیده می‌شود.
+
+۴. در «تدوین نهایی»، نماها را به ترتیب اضافه و IN/OUT را بر حسب ثانیه تعیین کنید. مسیرهای گفتار، موسیقی و صدای محیط را اضافه کنید. Gain ضریب شدت صداست؛ 1 یعنی بدون تغییر. Offset محل شروع صدا در کلیپ نهایی است. Fade تدریجی است و ducking بستر صدا را هنگام گفتار آرام می‌کند. برای نگه‌داشتن صدای ویدیوی ورودی، خود ویدیو را به‌عنوان مسیر ambience نیز انتخاب کنید.
+
+۵. زیرنویس SRT/VTT اختیاری وارد کنید. زیرنویس در MP4 قابل انتخاب است؛ روی تصویر سوزانده نمی‌شود. Export به صف CPU می‌رود و نتیجه در کتابخانه می‌آید؛ وضعیت آن در Composer دیده می‌شود. مجموع مدت نماها، مدت نهایی است؛ گفتار بلندتر را پیش از خروجی بازبینی کنید.
+
+۶. زبان، متن‌ها و پیش‌نویس تدوین هر پروژه در همان مرورگر ذخیره می‌شوند. پروژه‌ها، دارایی‌ها، صف و لینک مراحل در SQLite ماندگارند. فایل‌های اصلی و پایگاه داده را برای انتقال پروژه حفظ کنید؛ localStorage به همان مرورگر وابسته است.
+
+اگر ارتباط قطع شد، کار تأییدنشده تکرار نمی‌شود. unknown ممکن است صف را نگه دارد تا نتیجه بازیابی شود. فقط پس از بررسی دستی موتور و تأیید خالی بودن هر دو صف از «آزادسازی پس از بررسی» استفاده کنید؛ نتیجهٔ مبهم در تاریخچه باقی می‌ماند و هیچ کاری دوباره ارسال یا لغو نمی‌شود.
+
+## Verification
+
+```powershell
+uv pip install --no-cache --python 'B:\MediaStudio\.venv\Scripts\python.exe' -r backend/requirements-dev.lock
+$env:PYTHONPATH = "$PWD\backend"
+$env:STUDIO_DATA_ROOT = 'B:\MediaStudio'
+& 'B:\MediaStudio\.venv\Scripts\python.exe' -m pytest -q backend/tests
+cd frontend
+npm ci --ignore-scripts
+npm run typecheck
+npm run build
+```
+
+Run browser tests against a separate mock server/data root: STUDIO_E2E_URL selects the origin; STUDIO_BROWSER_CHANNEL=msedge uses installed Edge without downloading Chromium. CI installs Chromium explicitly. Never aim the mock E2E test at real mode. See docs/LOCAL_REVIEW.md for actual results.
+
+## Limits
+
+One user, loopback-only, engines managed separately. Direct engine UI jobs can race an admission check; the app pauses further admission when conflicts are observed. Composer is a clip/track form with previews, not a mixed live timeline. Workflows support ordered earlier-step binding, not a general node editor. No automatic transcription, lip sync, chatbot or API provider is enabled. The provider interface is reserved for future work. Generated video artifacts and Persian pronunciation need human review.

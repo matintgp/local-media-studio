@@ -33,7 +33,7 @@ def test_project_persistence_mock_pipeline_and_compose(ctx):
     a=c.get('/api/assets').json()
     assert len(a)==5 and all(x['origin']=='mock' for x in a)
     shot=next(x for x in a if x['kind']=='video');narr=next(x for x in a if x['kind']=='speech');music=next(x for x in a if x['kind']=='music')
-    exported=c.post('/api/exports',json={'project_id':pid,'shots':[{'asset_id':shot['id'],'start':.25,'end':2.25}],'tracks':[{'asset_id':narr['id'],'role':'narration','gain':1,'offset':0},{'asset_id':music['id'],'role':'music','gain':.5,'offset':.5}]})
+    exported=c.post('/api/exports',json={'project_id':pid,'wait':True,'shots':[{'asset_id':shot['id'],'start':.25,'end':2.25}],'tracks':[{'asset_id':narr['id'],'role':'narration','gain':1,'offset':0},{'asset_id':music['id'],'role':'music','gain':.5,'offset':.5}]})
     assert exported.status_code==200,exported.text
     assert exported.json()['meta']['audio'] is True
     assert 1.9<exported.json()['meta']['duration']<2.2
@@ -47,7 +47,10 @@ def test_cross_origin_and_media_boundary(ctx,tmp_path):
     from studio.core import secure_path
     with pytest.raises(ValueError):secure_path(tmp_path,tmp_path/'..'/'outside')
     with pytest.raises(ValueError):secure_path(tmp_path,Path('C:/Windows/system.ini'))
-    (tmp_path/'escape').symlink_to(tmp_path.parent,target_is_directory=True)
+    if os.name=='nt':
+        import subprocess
+        subprocess.run(['powershell','-NoProfile','-Command',"New-Item -ItemType Junction -Path '"+str(tmp_path/'escape')+"' -Target '"+str(tmp_path.parent)+"' | Out-Null"],check=True)
+    else:(tmp_path/'escape').symlink_to(tmp_path.parent,target_is_directory=True)
     with pytest.raises(ValueError):secure_path(tmp_path,tmp_path/'escape'/'secret')
     assert c.post('/api/jobs',json={'project_id':pid,'kind':'image','settings':{'prompt':''}}).status_code==422
 

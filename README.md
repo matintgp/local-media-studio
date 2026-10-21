@@ -2,7 +2,9 @@
 
 A local-first, Persian/English media workspace for existing ComfyUI and Wan2GP installations: image, video, speech, music, synchronized ambience, and final clip assembly.
 
-**Status: implementation handoff repository.** This initial commit contains requirements, architecture, sanitized integration recipes and an implementation task. The application is not implemented yet. Model weights, private media, machine configuration and credentials are not included.
+**Status: first locally tested implementation, under PR review.** React/FastAPI/SQLite studio with explicit mock/real modes, ComfyUI and WanGP adapters, dependent workflows and FFmpeg composition. All six media modalities and a composed MP4 were verified on the target Windows GPU. See [local review](docs/LOCAL_REVIEW.md) for evidence and remaining limits. Model weights, private media, machine configuration and credentials are not included.
+
+For installation, commands and usage, start with [README-IMPLEMENTATION.md](README-IMPLEMENTATION.md). The original cloud task/specification remains below for context.
 
 ## برای شروع در سایت ChatGPT
 

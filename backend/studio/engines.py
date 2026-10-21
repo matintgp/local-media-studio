@@ -4,8 +4,10 @@ import copy
 import json
 import uuid
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
 import httpx
+import websockets
 
 class EngineError(Exception): pass
 class UnknownSubmission(EngineError): pass
@@ -31,11 +33,27 @@ def require_success(payload):
     return payload
 
 class Comfy:
-    def __init__(self, url, template): self.url=url; self.template=template
+    def __init__(self, url, template):
+        self.url=url; self.template=template; self._listeners={};self._progress={}
+    async def listen(self,client_id):
+        try:
+            url=self.url.replace('http://','ws://',1)+'/ws?clientId='+client_id
+            async with websockets.connect(url,open_timeout=5,max_size=8*1024**2) as ws:
+                async for raw in ws:
+                    if not isinstance(raw,str):continue
+                    message=json.loads(raw);data=message.get('data',{});kind=message.get('type')
+                    if kind=='progress' and data.get('max',0)>0:
+                        self._progress[client_id]={'progress':{'phase':'sampling','status':f"{data.get('value')}/{data['max']}",'progress':100*data.get('value',0)/data['max']}}
+                    elif kind in ('executing','execution_start'):
+                        self._progress[client_id]={'progress':{'phase':'executing','status':str(data.get('node',''))}}
+                    if kind in ('execution_success','execution_error','execution_interrupted'):break
+        except (OSError,ValueError,websockets.WebSocketException):pass
+        finally:self._listeners.pop(client_id,None)
     async def request(self, method, path, **kwargs):
         try:
             async with httpx.AsyncClient(base_url=self.url, timeout=12, follow_redirects=False) as client:
-                r=await client.request(method,path,**kwargs); r.raise_for_status();return r.json()
+                r=await client.request(method,path,**kwargs); r.raise_for_status()
+                return r.json() if r.content else {}
         except (httpx.HTTPError,ValueError) as e: raise EngineError(f'ComfyUI unreachable or invalid: {type(e).__name__}') from e
     async def health(self):
         return await self.request('GET','/system_stats')
@@ -60,6 +78,7 @@ class Comfy:
         graph['41']['inputs'].update(width=int(settings.get('width',1024)),height=int(settings.get('height',1024)))
         graph['44']['inputs']['seed']=int(settings.get('seed',0))
         body={'prompt':graph,'client_id':job['id'],'extra_data':{'studio_job_id':job['id']}}
+        self._listeners[job['id']]=asyncio.create_task(self.listen(job['id']))
         try: out=await self.request('POST','/prompt',json=body)
         except EngineError as e: raise UnknownSubmission(str(e)) from e
         if out.get('node_errors'): raise EngineError('ComfyUI validation errors: '+str(out['node_errors'])[:300])
@@ -71,17 +90,35 @@ class Comfy:
         item=hist.get(job['external_id'])
         if item:
             state=item.get('status',{}).get('status_str','')
-            if state=='error': return 'failed',item
-            if item.get('status',{}).get('completed') or item.get('outputs'): return 'succeeded',item
+            if state=='error':
+                interrupted=any(m[0]=='execution_interrupted' for m in item.get('status',{}).get('messages',[]))
+                return ('cancelled' if interrupted else 'failed'),item
+            if state=='success' and item.get('status',{}).get('completed'): return 'succeeded',item
         queue=await self.request('GET','/queue')
         for label in ('queue_running','queue_pending'):
             if any(isinstance(entry,list) and len(entry)>1 and entry[1]==job['external_id'] for entry in queue.get(label,[])):
-                return 'running',None
+                return 'running',self._progress.get(job['id'])
         return 'unknown',None
-    async def reconcile(self,job): return await self.status(job)
+    async def reconcile(self,job):
+        if job['external_id']: return await self.status(job)
+        # Correlation metadata survives an app restart even if the POST reply did not.
+        history=await self.request('GET','/history?max_items=100')
+        for external,item in history.items():
+            prompt=item.get('prompt',[])
+            if len(prompt)>3 and prompt[3].get('studio_job_id')==job['id']:
+                return await self.status(dict(job,external_id=external))
+        return 'unknown',None
     async def cancel(self,job):
-        # Never issue global /interrupt or /queue clear. This adapter is deliberately conservative.
-        raise EngineError('ComfyUI running cancellation is not ownership-safe; reconcile and wait')
+        if not job.get('external_id'): raise EngineError('Cannot cancel an unconfirmed submission')
+        q=await self.request('GET','/queue')
+        if any(e[1]==job['external_id'] for e in q.get('queue_pending',[])):
+            await self.request('POST','/queue',json={'delete':[job['external_id']]})
+            return True
+        # Targeted interrupt is supported by the installed engine. Never send a
+        # blanket interrupt: the engine verifies the prompt_id again server-side.
+        if any(e[1]==job['external_id'] for e in q.get('queue_running',[])):
+            await self.request('POST','/interrupt',json={'prompt_id':job['external_id']})
+        return False
 
 
 def parse_mcp(body, content_type):
@@ -103,22 +140,31 @@ class Wan:
 
     A lost generate reply stays unknown: it is NEVER automatically replayed.
     """
-    def __init__(self,url): self.url=url;self.session=None;self.context=None;self.seq=0
+    def __init__(self,url,state_path=None):
+        self.url=url;self.session=None;self.context=None;self.seq=0
+        self.protocol='2025-03-26'; self.state_path=state_path
+        self._connect_lock=asyncio.Lock()
+        if state_path and state_path.is_file():
+            try: self.context=json.loads(state_path.read_text('utf-8')).get('context')
+            except (ValueError,OSError): pass
     async def rpc(self,method,params=None, notification=False, refresh=True):
         self.seq+=1
         body={'jsonrpc':'2.0','method':method}
         if not notification:body['id']=self.seq
         if params is not None:body['params']=params
-        headers={'Accept':'application/json, text/event-stream','Content-Type':'application/json','MCP-Protocol-Version':'2025-03-26'}
+        headers={'Accept':'application/json, text/event-stream','Content-Type':'application/json','MCP-Protocol-Version':self.protocol}
         if self.session: headers['Mcp-Session-Id']=self.session
         try:
             async with httpx.AsyncClient(timeout=30,follow_redirects=False) as client:
                 r=await client.post(self.url,json=body,headers=headers)
             if r.status_code==404 and self.session and refresh and method!='initialize':
-                self.session=None;self.context=None
+                self.session=None
                 # Tool calls may have performed a side effect before the session expired.
                 # Never replay an ambiguous generate/postprocess/upload request automatically.
-                if method=='tools/call':
+                action=(params or {}).get('arguments',{}).get('action')
+                safe_tool=(params or {}).get('name') in ('wangp_workspace','wangp_model','wangp_validate') or ((params or {}).get('name')=='wangp_session' and action in ('get_job','list_queue','get_upload'))
+                if method=='tools/call' and not safe_tool:
+                    self.context=None
                     raise UnknownSubmission('WanGP MCP session expired during a tool call; job not replayed')
                 await self.connect()
                 return await self.rpc(method,params,notification,False)
@@ -127,11 +173,13 @@ class Wan:
             return {} if notification else parse_mcp(r.text,r.headers.get('content-type','application/json'))
         except httpx.HTTPError as e: raise EngineError('WanGP MCP connection failed: '+type(e).__name__) from e
     async def connect(self):
-        self.session=None;self.context=None
-        result=await self.rpc('initialize',{'protocolVersion':'2025-03-26','capabilities':{},'clientInfo':{'name':'local-media-studio','version':'0.1.0'}})
-        if not result.get('protocolVersion'): raise EngineError('WanGP MCP initialization failed')
-        await self.rpc('notifications/initialized',notification=True)
-        return result
+        async with self._connect_lock:
+            if self.session: return {'protocolVersion':self.protocol}
+            result=await self.rpc('initialize',{'protocolVersion':self.protocol,'capabilities':{},'clientInfo':{'name':'local-media-studio','version':'0.2.0'}})
+            if not result.get('protocolVersion'): raise EngineError('WanGP MCP initialization failed')
+            self.protocol=result['protocolVersion']
+            await self.rpc('notifications/initialized',notification=True)
+            return result
     async def tool(self,name,args):
         if not self.session: await self.connect()
         return require_success(await self.rpc('tools/call',{'name':name,'arguments':args}))
@@ -143,29 +191,65 @@ class Wan:
         data=await self.tool('wangp_workspace',{'action':'current'})
         ctx=data.get('agent_context') or data.get('workspace',{}).get('agent_context')
         if not ctx: raise EngineError('WanGP did not return agent_context')
-        self.context=ctx; return ctx
+        self.context=ctx
+        if self.state_path:
+            tmp=self.state_path.with_suffix('.tmp')
+            tmp.write_text(json.dumps({'context':ctx}),encoding='utf-8')
+            tmp.replace(self.state_path)
+        return ctx
     async def conflict(self):
-        # Engine activity cannot reliably be inferred without a supported global status tool.
-        # Fail closed if discovery does not explicitly expose one.
-        tools=await self.health()
-        names={x.get('name') for x in tools.get('tools',[])}
-        if 'wangp_session' not in names: raise EngineError('Cannot inspect WanGP session/queue')
-        try:
-            data=await self.tool('wangp_session',{'action':'list_jobs','agent_context':await self.workspace()})
-        except EngineError as e:
-            raise EngineError('WanGP external activity could not be verified; dispatch blocked') from e
-        return any(j.get('status') not in ('done','failed','cancelled') for j in data.get('jobs',[]))
+        data=await self.tool('wangp_session',{'action':'list_queue','arguments':{},'agent_context':await self.workspace()})
+        if 'total_count' not in data: raise EngineError('WanGP queue activity is unconfirmed')
+        return int(data['total_count']) > 0
+
+    async def upload(self,path,gallery=False):
+        """Upload only an app-authorized file; ticket destinations stay on MCP origin."""
+        ctx=await self.workspace()
+        action='create_gallery_upload' if gallery else 'create_file_upload'
+        args={'filename':path.name}
+        if not gallery: args['size_bytes']=path.stat().st_size
+        ticket=await self.tool('wangp_session',{'action':action,'arguments':args,'agent_context':ctx})
+        target=urljoin(self.url,ticket.get('upload_url',''))
+        base=urlparse(self.url); parsed=urlparse(target)
+        if (parsed.scheme,parsed.netloc)!=(base.scheme,base.netloc) or not parsed.path.startswith('/wangp_api/'):
+            raise EngineError('Upload destination outside configured engine')
+        if path.stat().st_size>min(ticket.get('max_bytes',256*1024**2),256*1024**2):
+            raise EngineError('Input exceeds engine upload limit')
+        chunk_size=min(ticket.get('chunk_bytes',4*1024**2),4*1024**2)
+        result={}; offset=0
+        async with httpx.AsyncClient(timeout=60,follow_redirects=False) as client:
+            with path.open('rb') as reader:
+                while chunk:=reader.read(chunk_size):
+                    r=await client.put(target,content=chunk,headers={'Upload-Offset':str(offset),'Content-Type':'application/octet-stream'})
+                    r.raise_for_status(); result=r.json(); offset+=len(chunk)
+        if result.get('status') not in ('uploaded','done','complete') or not (result.get('path') or result.get('media_id')):
+            raise EngineError('Upload did not publish a usable engine reference')
+        return result
     async def validate(self,settings):
         ctx=await self.workspace()
         if settings.get('kind')=='ambience': return ctx
-        model=settings.get('model_type')
-        availability=await self.tool('wangp_model',{'model_type':model,'action':'availability'})
-        if availability.get('available') is False:raise EngineError('WanGP model unavailable: '+str(model))
-        validation=await self.tool('wangp_validate',{'settings':settings,'agent_context':ctx})
+        native={k:v for k,v in settings.items() if k!='kind'}
+        validation=await self.tool('wangp_validate',{'settings':native,'agent_context':ctx})
         if validation.get('valid') is not True: raise EngineError('WanGP rejected settings: '+str(validation)[:250])
+        if any(t.get('availability',{}).get('available') is False for t in validation.get('tasks',[])):
+            raise EngineError('WanGP model is not installed; no downloads are attempted')
         return ctx
     async def submit(self,job):
-        settings=json.loads(job['settings']);ctx=await self.validate(settings)
+        settings=json.loads(job['settings'])
+        for local in ('_image_path','_video_path','start_asset_id','video_asset_id'):
+            settings.pop(local,None)
+        if job.get('_image_path'):
+            uploaded=await self.upload(Path(job['_image_path']))
+            settings['image_start']=uploaded['path']
+        if job.get('_video_path'):
+            uploaded=await self.upload(Path(job['_video_path']),gallery=True)
+            settings['media_id']=uploaded['media_id']
+        if job['kind']!='ambience':
+            defaults=await self.tool('wangp_model',{'model_type':settings['model_type'],'action':'defaults'})
+            # Runtime defaults may be exposed directly or nested by engine version.
+            baseline=defaults.get('settings',defaults)
+            if isinstance(baseline,dict): settings={**baseline,**settings}
+        ctx=await self.validate(settings)
         if job['kind']=='ambience':
             args={'media':settings['media_id'],'action':'mmaudio','arguments':{'prompt':settings['prompt'],'negative_prompt':settings.get('negative_prompt',''),'seed':settings.get('seed',0)},'agent_context':ctx,'wait':False,'request_id':job['request_id']}
             name='wangp_postprocess'
@@ -183,8 +267,10 @@ class Wan:
         data=await self.tool('wangp_session',{'action':'get_job','arguments':{'job_id':job['external_id'],'wait_s':0,'event_limit':3},'agent_context':ctx})
         if data.get('done'):
             result=data.get('result',{})
-            return ('succeeded' if result.get('success') is True and not result.get('errors') else 'failed'),data
+            return ('cancelled' if result.get('cancelled') else 'succeeded' if result.get('success') is True and not result.get('errors') else 'failed'),data
         return 'running',data
     async def reconcile(self,job): return await self.status(job)
     async def cancel(self,job):
-        raise EngineError('Cancellation requires confirmed ownership-specific WanGP contract')
+        if not job.get('external_id') or not job.get('context'): raise EngineError('Cancellation ownership unconfirmed')
+        await self.tool('wangp_session',{'action':'cancel_job','arguments':{'job_id':job['external_id']},'agent_context':job['context']})
+        return False

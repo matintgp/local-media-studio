@@ -36,14 +36,18 @@ def config():
     return {'root':path,'mode':mode,'locale':os.getenv('STUDIO_LOCALE','fa'),
             'comfy':os.getenv('STUDIO_COMFY_URL','http://127.0.0.1:8188').rstrip('/'),
             'wan':os.getenv('STUDIO_WAN_URL','http://127.0.0.1:7866/mcp'),
-            'reserve':int(os.getenv('STUDIO_RESERVE_GIB','0' if mode=='mock' else '60'))*1024**3,
+            'reserve':int(float(os.getenv('STUDIO_RESERVE_GIB','0' if mode=='mock' else '60'))*1024**3),
             'ffmpeg':os.getenv('STUDIO_FFMPEG','ffmpeg'), 'ffprobe':os.getenv('STUDIO_FFPROBE','ffprobe')}
 
 
 def secure_path(root:Path, candidate:Path) -> Path:
     """Reject traversal, Windows drive/UNC/device syntax, links escaping allowed root."""
     value = str(candidate)
-    if value.startswith(('\\\\','//','\\?\\')) or '\\' in value or (len(value)>1 and value[1]==':') and os.name!='nt':
+    if '\x00' in value or value.startswith(('\\\\','//','\\?\\')):
+        raise ValueError('A local managed asset path is required')
+    # Native Windows paths contain backslashes and a drive prefix. Reject these
+    # on POSIX; on Windows reject alternate streams after the drive prefix.
+    if (os.name != 'nt' and ('\\' in value or (len(value)>1 and value[1]==':'))) or (os.name == 'nt' and ':' in value[2:]):
         raise ValueError('A local managed asset path is required')
     resolved = candidate.resolve(strict=False)
     base = root.resolve(strict=True)
@@ -95,6 +99,9 @@ class Store:
             CREATE TABLE IF NOT EXISTS exports(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,state TEXT NOT NULL,spec TEXT NOT NULL,asset_id TEXT,error TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT,event TEXT NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS admission(id INTEGER PRIMARY KEY CHECK(id=1),job_id TEXT);
+            CREATE TABLE IF NOT EXISTS workflow_jobs(workflow_id TEXT NOT NULL,step_index INTEGER NOT NULL,job_id TEXT NOT NULL,PRIMARY KEY(workflow_id,step_index),FOREIGN KEY(workflow_id) REFERENCES workflows(id),FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS assets_job_idx ON assets(job_id);
+            CREATE INDEX IF NOT EXISTS jobs_state_idx ON jobs(state,created);
             INSERT OR IGNORE INTO admission(id,job_id) VALUES(1,NULL);
             ''')
 
@@ -141,7 +148,13 @@ class Store:
 
     def asset_path(self, asset):
         if not asset.get('path'): raise HTTPException(409,'External media reference must be materialized by its engine adapter')
-        try: p=secure_path(self.root,Path(asset['path']))
+        root = self.root
+        if asset.get('origin') in ('comfy', 'wan'):
+            env_name = 'STUDIO_COMFY_OUTPUT_ROOT' if asset['origin']=='comfy' else 'STUDIO_WAN_OUTPUT_ROOT'
+            configured = os.getenv(env_name)
+            if not configured: raise HTTPException(409, f'Configure {env_name}')
+            root = Path(configured)
+        try: p=secure_path(root,Path(asset['path']))
         except ValueError: raise HTTPException(403,'Unauthorized media path')
         if not p.is_file(): raise HTTPException(404,'Referenced media is missing')
         return p

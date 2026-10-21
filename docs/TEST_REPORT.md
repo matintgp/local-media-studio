@@ -35,3 +35,6 @@ STUDIO_DATA_ROOT=/path/to/existing/approved/data STUDIO_MODE=mock STUDIO_RESERVE
 ```
 
 For browser E2E, keep backend (`8787`) and Vite (`5173`) running separately in mock mode. Test-generated screenshots are written under `docs/screenshots/`. On Windows follow `README-IMPLEMENTATION.md` and `scripts/check-windows.ps1` without touching existing engine environments. Do **not** merge this into main without resolving the acceptance gaps.
+# Historical cloud report
+
+The original report below is superseded for local verification by [LOCAL_REVIEW.md](LOCAL_REVIEW.md).

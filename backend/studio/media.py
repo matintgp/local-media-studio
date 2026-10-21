@@ -5,20 +5,30 @@ import math
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from .core import ensure_space, secure_path, uid
 
 class MediaError(Exception):pass
 
-def run(args):
+def run(args,root=None,reserve=0):
     try:
-        p=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=180,check=False)
+        with subprocess.Popen(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE) as p:
+            deadline=time.monotonic()+180
+            while True:
+                try:
+                    output,error=p.communicate(timeout=1)
+                    break
+                except subprocess.TimeoutExpired:
+                    if time.monotonic()>deadline or (root and shutil.disk_usage(root).free<reserve):
+                        p.kill();p.communicate()
+                        raise MediaError('Render stopped: time limit or storage reserve reached; sources preserved')
     except (OSError,subprocess.TimeoutExpired) as e: raise MediaError(str(e)) from e
-    if p.returncode: raise MediaError(p.stderr.decode(errors='replace')[-750:])
-    return p.stdout
+    if p.returncode: raise MediaError(error.decode(errors='replace')[-750:])
+    return output
 
 def probe(path,ffprobe='ffprobe'):
-    doc=json.loads(run([ffprobe,'-v','error','-show_format','-show_streams','-of','json',str(path)]))
+    doc=json.loads(run([ffprobe,'-v','error','-protocol_whitelist','file,pipe','-format_whitelist','mov,matroska,webm,wav,mp3,flac,ogg,image2,png_pipe,jpeg_pipe,webp_pipe','-show_format','-show_streams','-of','json',str(path)]))
     vs=next((s for s in doc.get('streams',[]) if s.get('codec_type')=='video'),None)
     return {'duration':float(doc.get('format',{}).get('duration',0)),'width':vs.get('width') if vs else None,'height':vs.get('height') if vs else None,'format':doc.get('format',{}).get('format_name'),'audio':any(s.get('codec_type')=='audio' for s in doc.get('streams',[]))}
 
@@ -63,7 +73,7 @@ def render_composition(store,spec,ffmpeg='ffmpeg',ffprobe='ffprobe',reserve=0):
         if not meta['width']:raise MediaError('A shot must contain video')
         start=finite(shot.get('start',0));end=finite(shot.get('end',meta['duration']))
         if end<=start or end>meta['duration']+0.1:raise MediaError('Invalid shot in/out points')
-        inputs+=['-i',str(p)];duration=end-start;total+=duration
+        inputs+=['-protocol_whitelist','file,pipe','-i',str(p)];duration=end-start;total+=duration
         graph.append(f'[{offset}:v]trim=start={start}:end={end},setpts=PTS-STARTPTS,scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fps},format=yuv420p[v{i}]')
         shot_labels.append(f'[v{i}]');offset+=1
     if total>900:raise MediaError('Export duration exceeds 15 minutes')
@@ -80,7 +90,7 @@ def render_composition(store,spec,ffmpeg='ffmpeg',ffprobe='ffprobe',reserve=0):
         if end<=start or end>meta['duration']+0.1 or at>=total:raise MediaError('Invalid audio trim or offset')
         duration=min(end-start,total-at)
         if fadein>duration or fadeout>duration:raise MediaError('Fade exceeds track duration')
-        inputs+=['-i',str(p)]
+        inputs+=['-protocol_whitelist','file,pipe','-i',str(p)]
         chain=f'[{offset}:a]atrim=start={start}:end={start+duration},asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume={gain}'
         if fadein:chain+=f',afade=t=in:st=0:d={fadein}'
         if fadeout:chain+=f',afade=t=out:st={max(0,duration-fadeout)}:d={fadeout}'
@@ -95,20 +105,23 @@ def render_composition(store,spec,ffmpeg='ffmpeg',ffprobe='ffprobe',reserve=0):
     if n and o and spec.get('duck',True):
         graph.append(f'{n}asplit=2[nside][nvoice]')
         graph.append(f'{o}[nside]sidechaincompress=threshold=0.035:ratio=6:attack=35:release=300[ducked]')
-        graph.append('[ducked][nvoice]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95[amix]')
+        graph.append('[ducked][nvoice]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95:level=0[amix]')
         audio='[amix]'
     elif n and o:
-        graph.append(f'{o}{n}amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95[amix]');audio='[amix]'
-    else:audio=n or o
+        graph.append(f'{o}{n}amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95:level=0[amix]');audio='[amix]'
+    else:
+        audio=n or o
+        if audio:
+            graph.append(f'{audio}alimiter=limit=0.95:level=0[limited]');audio='[limited]'
     if not audio:
         inputs+=['-f','lavfi','-t',str(total),'-i','anullsrc=r=48000:cl=stereo'];audio=f'{offset}:a';offset+=1
     subtitle_index=None
     if spec.get('subtitle_asset_id'):
         sub=source(spec['subtitle_asset_id'])
-        if sub.suffix.lower() != '.srt' or sub.stat().st_size>1024*1024 or b'\x00' in sub.read_bytes():
-            raise MediaError('Subtitles must be a valid SRT text asset under 1 MiB')
+        if sub.suffix.lower() not in ('.srt','.vtt') or sub.stat().st_size>1024*1024 or b'\x00' in sub.read_bytes():
+            raise MediaError('Subtitles must be a valid SRT/VTT text asset under 1 MiB')
         subtitle_index=offset
-        inputs+=['-i',str(sub)]
+        inputs+=['-protocol_whitelist','file,pipe','-i',str(sub)]
     staging=store.root/'staging'/(uid()+'.mp4')
     dest=store.root/'exports'/(uid()+'.mp4')
     ensure_space(store.root,int(max(total*2*1024*1024,1024*1024)),reserve)
@@ -117,7 +130,7 @@ def render_composition(store,spec,ffmpeg='ffmpeg',ffprobe='ffprobe',reserve=0):
         args+=['-map',f'{subtitle_index}:0','-c:s','mov_text']
     args+=[str(staging)]
     try:
-        run(args)
+        run(args,store.root,reserve)
         result=probe(staging,ffprobe)
         if not result['width'] or not result['audio'] or abs(result['duration']-total)>0.4:raise MediaError('Output probe failed timing or audio verification')
         os.replace(staging,dest)

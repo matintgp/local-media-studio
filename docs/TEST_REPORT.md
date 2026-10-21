@@ -8,14 +8,19 @@
 - TypeScript syntactic transpile of `frontend/src/main.tsx`, `frontend/vite.config.ts` and `frontend/e2e/workspace.spec.ts` via globally installed TypeScript — **no syntactic diagnostics**, not equivalent to a typecheck or bundle build.
 - A real CPU FFmpeg H.264/AAC MP4 was created and probed by backend tests: 2 s single-shot export with narration/music/sidechain ducking; heterogeneous multishot composition, audio-less input, SRT subtitle mux. No GPU, model, model download, or engine modification.
 
+## GitHub Actions verification (2026-10-21)
+
+- [CI run 39551358401](https://github.com/matintgp/local-media-studio/actions/runs/39551358401) completed successfully: frontend `npm install`, `npm run typecheck`, `npm run build`; backend `pytest` — **12 passed, 1 warning in 8.10 s**; Playwright Chromium browser test — **1 passed (4.8 s)**.
+- Four **actual browser screenshots from the labelled mock application**: `create-fa.png`, `queue-fa.png`, `composer-fa.png`, `composer-en.png`, downloadable as [workflow artifact 12323941316](https://github.com/matintgp/local-media-studio/actions/runs/39551358401/artifacts/12323941316). This does not verify any real model inference.
+
 ## Not run / not verified
 
-- Fresh npm install and locked frontend build: **not run** because this sandbox has no network access and no cached React/Vite packages. `frontend/package-lock.json` is absent. Required acceptance gate is open.
+- Local sandbox npm dependency installation timed out, but fresh frontend dependency install, typecheck and production build **passed in CI**. The required committed `frontend/package-lock.json` is still absent.
 - Complete transitive backend dependency lock and lint/typecheck: not finished; requirements pin only top-level packages.
-- Playwright browser tests and screenshot capture: test source is included at `frontend/e2e/workspace.spec.ts` but has **not run**. No UI screenshots are claimed. The CI workflow attempts screenshot collection after dependency installation.
+- Browser automation now passed in CI and generated four screenshots, but **extended browser coverage** (keyboard flow, disconnected/unknown recovery and full mock video-to-ambience-to-export click flow) remains incomplete.
 - Live ComfyUI Z-Image and WanGP MCP job submission, uploads, model discovery, output access or cancellation on owner Windows/GPU: **not run**. Implemented transports require an on-device integration gate.
 - Real WanGP media upload tickets and virtual media materialization, reliable external queue introspection, Comfy websocket progress, cancellation of owned running jobs, multi-step workflow DAG dependencies/recovery are **unfinished**. In real mode ambiguous or unsupported operations fail closed. The real video form returns an explicit 409 until authorized upload ticket handling exists.
-- Multi-worker scheduler is unsupported (`--workers 1`). The browser screenshot gate remains open. Branch and PR publication are separate from test verification; their availability does not mean the application is production-ready.
+- Multi-worker scheduler is unsupported (`--workers 1`). Branch and draft PR publication and green CPU CI are not production or real GPU verification.
 
 ## Run verification on owner machine after reviewing changes
 

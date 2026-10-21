@@ -1,0 +1,43 @@
+name: CPU checks
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: python -m pip install -r backend/requirements-dev.lock
+      - run: STUDIO_DATA_ROOT=$(mktemp -d) STUDIO_MODE=mock PYTHONPATH=backend pytest -q backend/tests
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: cd frontend && npm ci --ignore-scripts && npm run typecheck && npm run build
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: python -m pip install -r backend/requirements.lock
+      - run: cd frontend && npm ci --ignore-scripts && npx playwright install --with-deps chrome
+      - run: mkdir -p /tmp/studio-ci && STUDIO_DATA_ROOT=/tmp/studio-ci STUDIO_MODE=mock STUDIO_RESERVE_GIB=0 PYTHONPATH=backend python -m uvicorn studio.app:app --host 127.0.0.1 --port 8787 &
+      - run: cd frontend && npm run dev -- --host 127.0.0.1 > /tmp/studio-vite.log 2>&1 &
+      - run: sleep 6 && cd frontend && STUDIO_BROWSER_CHANNEL=chrome npm run test:e2e
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-browser-screenshots
+          path: docs/screenshots/*.png

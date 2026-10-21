@@ -21,3 +21,10 @@ First-run setup, explicit demo mode, engines disconnected, missing model, empty 
 Keyboard-accessible controls, visible focus, labelled inputs, accessible dialogs, reduced-motion support, non-color-only status, confirmation only for consequential destructive actions. Local loopback operation needs no signup page. Distinguish Save preset, Queue generation, Cancel request and Delete reference.
 
 Use legal small synthetic assets for screenshots and mock previews. Mark them as demo data. Provide screenshots of a populated Persian creation screen, composer, queue error/recovery state and an English screen.
+
+
+## Applied visual revision (owner requested)
+
+Neutral warm charcoal surfaces with a restrained amber primary accent; semantic green is reserved for confirmed state. Vazirmatn v33.003 variable WOFF2 is bundled locally under SIL OFL 1.1. No runtime font/CDN requests. A 224px navigation rail, compact production inspector and larger neutral media canvas establish hierarchy. Inline SVG icons share one stroke vocabulary. Project media stays the focal point.
+
+The library has modality/search filters and actual dimensions/durations. Creation supports selecting recent outputs and downloading/reusing the selected asset. The editor uses actual source thumbnails, a collapsed guidance section and a distinct final-export preview. Responsive layouts use horizontal navigation and single-column creation below narrow breakpoints; timeline overflow stays inside its own scroller.

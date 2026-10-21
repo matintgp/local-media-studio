@@ -49,16 +49,31 @@ test('Persian mock project, queue, gallery, composer, English switch',async({pag
  const projectId=await page.evaluate(()=>localStorage.getItem('studio.project'));
  const composition=exported.find((a:{origin:string;project_id:string})=>a.origin==='composition'&&a.project_id===projectId);
  expect(JSON.parse(composition.meta).duration).toBeCloseTo(5.9,1);
+ await page.locator('.filterTabs').getByRole('button',{name:'تصویر',exact:true}).click();
+ await expect(page.locator('.assetCard')).toHaveCount(1);
+ await page.getByRole('textbox',{name:'جست‌وجوی فایل‌ها'}).fill('no-matching-asset');
+ await expect(page.locator('.assetCard')).toHaveCount(0);
+ await page.getByRole('textbox',{name:'جست‌وجوی فایل‌ها'}).fill('');
+ await page.locator('.filterTabs').getByRole('button',{name:'همهٔ فایل‌ها',exact:true}).click();
+ await expect(page.locator('.assetCard')).toHaveCount(4);
  await page.getByRole('button',{name:'تدوین نهایی'}).click();
  await expect(page.locator('.laneItem')).toHaveCount(2);
  await page.reload();
  await page.getByRole('button',{name:'تدوین نهایی'}).click();
  await expect(page.locator('.laneItem')).toHaveCount(2);
  await expect(page.locator('.trackItem')).toHaveCount(1);
+ await page.setViewportSize({width:390,height:844});
+ await page.evaluate(()=>document.fonts.ready);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await expect(page.getByRole('button',{name:/خروجی MP4/})).toBeVisible();
+ await page.screenshot({path:'../docs/screenshots/composer-mobile-fa.png',fullPage:true});
+ await page.setViewportSize({width:1440,height:900});
  await page.getByRole('button',{name:'Switch language'}).click();
  await expect(page.locator('html')).toHaveAttribute('dir','ltr');
  await page.screenshot({path:'../docs/screenshots/composer-en.png',fullPage:true});
  await page.getByRole('button',{name:/Assistant/}).click();
+ await page.getByRole('button',{name:'Suggest a product introduction concept',exact:true}).click();
+ await expect(page.getByLabel('Assistant message')).toHaveValue('Suggest a product introduction concept');
  await page.getByLabel('Assistant provider').selectOption('ollama');
  await page.getByLabel('Assistant model').fill('transport-test-only');
  await page.getByRole('button',{name:'Save connection',exact:true}).click();
@@ -75,4 +90,11 @@ test('Persian mock project, queue, gallery, composer, English switch',async({pag
  await page.getByRole('button',{name:/Assistant/}).click();
  await page.getByRole('button',{name:'Switch language'}).click();
  await page.screenshot({path:'../docs/screenshots/assistant-fa.png',fullPage:true});
+ for(const width of [390,1366]){
+  await page.setViewportSize({width,height:844});
+  for(const label of ['ساخت مدیا','کتابخانه','گردش‌کار','تدوین نهایی','صف پردازش','دستیار تولید','تنظیمات']){
+   await page.locator('nav').getByRole('button',{name:new RegExp(label)}).click();
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+ }
 });

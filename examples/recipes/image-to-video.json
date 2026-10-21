@@ -1,0 +1,14 @@
+{
+  "guidance_scale": 1,
+  "video_length": 121,
+  "image_prompt_type": "S",
+  "seed": 20261021,
+  "flow_shift": 3,
+  "force_fps": 24,
+  "prompt": "The subject breathes naturally and slowly turns toward the camera. A light breeze moves the fabric. One continuous shot, restrained motion, preserve the face and setting.",
+  "num_inference_steps": 3,
+  "model_type": "ti2v_2_2_fastwan",
+  "resolution": "640x640",
+  "sample_solver": "unipc",
+  "image_start": "<replace-with-runtime-upload-reference>"
+}

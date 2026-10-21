@@ -1,0 +1,9 @@
+{
+  "repeat_generation": 1,
+  "num_inference_steps": 8,
+  "seed": 20261021,
+  "model_type": "ace_step_v1_5_turbo_lm_0_6b",
+  "prompt": "[Instrumental]",
+  "alt_prompt": "Instrumental cinematic score, warm plucked strings, gentle frame drum, soft orchestral strings, reflective hopeful mood, no vocals.",
+  "duration_seconds": 24
+}

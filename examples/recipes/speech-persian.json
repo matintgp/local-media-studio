@@ -1,0 +1,9 @@
+{
+  "repeat_generation": 1,
+  "model_mode": "persian",
+  "seed": 20261021,
+  "model_type": "omnivoice",
+  "prompt": "سلام. به استودیوی مدیا خوش آمدید.",
+  "duration_seconds": 0,
+  "num_inference_steps": 32
+}

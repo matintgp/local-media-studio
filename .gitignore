@@ -1,0 +1,57 @@
+# Local credentials/configuration
+.env
+.env.*
+!.env.example
+studio.local.json
+config/*.local.json
+*session*.json
+*upload-ticket*.json
+*.pem
+*.key
+
+# Build/runtime state
+node_modules/
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+data/
+cache/
+outputs/
+uploads/
+workspaces/
+.DS_Store
+Thumbs.db
+
+# No model or private media payloads
+*.safetensors
+*.ckpt
+*.pth
+*.pt
+*.onnx
+*.gguf
+*.bin
+*.wav
+*.mp3
+*.flac
+*.mp4
+*.mov
+*.mkv
+*.zip
+
+# Reviewed, synthetic test fixtures may be added deliberately here only
+!tests/fixtures/
+!tests/fixtures/**

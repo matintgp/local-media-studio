@@ -1,0 +1,15 @@
+{
+  "name": "wangp_postprocess",
+  "arguments": {
+    "request_id": "<persisted-app-job-id>",
+    "wait": false,
+    "arguments": {
+      "negative_prompt": "speech, dialogue, music, singing, loud impacts, distortion",
+      "seed": 20261021,
+      "prompt": "Gentle wind, soft fabric rustling, subtle armor creaks, distant birds, quiet outdoor ambience."
+    },
+    "media": "<runtime-video-media-id>",
+    "agent_context": "<runtime-workspace-context>",
+    "action": "mmaudio"
+  }
+}

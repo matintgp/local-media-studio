@@ -1,0 +1,503 @@
+{
+  "tools": [
+    {
+      "name": "wangp_model",
+      "description": "Explore a chosen model's capabilities, limits, definition, defaults, accelerator profiles, presets, user settings and LoRAs.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "model_type": {
+            "type": "string"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "arguments": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "model_type"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "wangp_modelDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "wangp_io",
+      "description": "Navigate authorized folders, search files or text, read/edit documents, save reusable skills, manage archives, and inspect physical metadata. Optional agent_context resumes an assigned workspace; obtain it with wangp_workspace. Shared-user workspace and queue permissions apply.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "arguments": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "agent_context": {
+            "type": "string",
+            "description": "Context returned by wangp_workspace; reuse after reconnecting or for separate logical agents."
+          }
+        },
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "wangp_ioDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "wangp_toolbox",
+      "description": "Inspect or compare media, transcribe, extract, trim, assemble and transform media, or retrieve their generation settings. wait=false runs a slow action (transcription, 3D views, masks) in the background and returns a job_id for wangp_session get_job / wait_jobs. Optional agent_context resumes an assigned workspace; obtain it with wangp_workspace. Shared-user workspace and queue permissions apply.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "arguments": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "wait": {
+            "default": true,
+            "type": "boolean"
+          },
+          "agent_context": {
+            "type": "string",
+            "description": "Context returned by wangp_workspace; reuse after reconnecting or for separate logical agents."
+          }
+        },
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "wangp_toolboxDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "wangp_validate",
+      "description": "CPU-only preflight without submitting, downloading or loading models. Supply settings (one generation or batch), OR media + process + parameters for a processor. Summary returns requested size/duration, grid-adjusted canvas and initial dimensions for simple inputs, the window_plan of sliding-window videos (each window's generated_seconds), adjustments, inputs, diagnostics, availability and queue counts. Initial dimensions precede optional upscaling; complex input sizing is marked unresolved. Requested values are not predictions of final output geometry or cumulative duration. detail='full' only adds every effective setting and its origin (about 10 KB per task). valid does not guarantee runtime memory or model-specific inference checks. Optional agent_context resumes an assigned workspace; obtain it with wangp_workspace. Shared-user workspace and queue permissions apply.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "media": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "process": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "parameters": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "detail": {
+            "default": "summary",
+            "enum": [
+              "summary",
+              "full"
+            ],
+            "type": "string"
+          },
+          "agent_context": {
+            "type": "string",
+            "description": "Context returned by wangp_workspace; reuse after reconnecting or for separate logical agents."
+          }
+        },
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "wangp_validateDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "wangp_generate",
+      "description": "Generate image, video, audio or 3D assets. settings is one flat WanGP settings object, or a list of them for a batch submitted together in order. Each object needs model_type and the complete prompt; other WanGP settings go beside them, only custom_settings holds nested values, and media go directly in fields such as image_start or audio_guide. Template and media settings can be copied and edited. edit_* post-processing tasks need no model or prompt. A prompt may be @file(\"@documents/prompt.txt\"): WanGP reads and snapshots that authorized UTF-8 file, preserving blank lines. Omitted resolution, video_length or duration_seconds, and seed use Deepy's standing defaults before model factory settings; supplied values are preserved. wait=true waits for completion; timeout_s bounds waiting without cancelling the job. wait=false returns a job for asynchronous tracking. Optional agent_context resumes an assigned workspace; obtain it with wangp_workspace. Shared-user workspace and queue permissions apply.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "template": {
+                    "type": "string",
+                    "description": "Optional template to start from: \"<task>\" (such as \"gen_video\") for its configured default, or \"<task>/<template name>\". WanGP fills in its settings except its example prompt and alt_prompt; give only the keys you change."
+                  },
+                  "model_type": {
+                    "type": "string",
+                    "description": "WanGP model type (from the template when one is named)."
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "description": "Complete prompt text or @file reference."
+                  }
+                },
+                "required": [
+                  "prompt"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "minItems": 1
+              }
+            ]
+          },
+          "wait": {
+            "type": "boolean",
+            "default": true
+          },
+          "timeout_s": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "default": null
+          },
+          "event_limit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 500,
+            "default": 0
+          },
+          "request_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Optional retry key: the same key and payload returns the original job, even after a restart; a different payload is rejected."
+          },
+          "agent_context": {
+            "type": "string",
+            "description": "Context returned by wangp_workspace; reuse after reconnecting or for separate logical agents."
+          }
+        },
+        "required": [
+          "settings"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "wangp_generateDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "wangp_postprocess",
+      "description": "Discover and apply compatible image, video or audio treatments, including upscaling, refinement, interpolation and sound processing. media is the media ID or path to process; use \"image\", \"video\" or \"audio\" only to list treatments before any media exists. Optional agent_context resumes an assigned workspace; obtain it with wangp_workspace. Shared-user workspace and queue permissions apply.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "media": {
+            "type": "string"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "arguments": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "wait": {
+            "type": "boolean",
+            "default": true
+          },
+          "timeout_s": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "default": null
+          },
+          "event_limit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 500,
+            "default": 0
+          },
+          "request_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Optional retry key: the same key and payload returns the original job, even after a restart; a different payload is rejected."
+          },
+          "agent_context": {
+            "type": "string",
+            "description": "Context returned by wangp_workspace; reuse after reconnecting or for separate logical agents."
+          }
+        },
+        "required": [
+          "media"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "wangp_postprocessDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "wangp_session",
+      "description": "Track or cancel generation and post-processing jobs, send configured notifications, and transfer authorized files or Gallery media when supported. Optional agent_context resumes an assigned workspace; obtain it with wangp_workspace. Shared-user workspace and queue permissions apply.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "arguments": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "agent_context": {
+            "type": "string",
+            "description": "Context returned by wangp_workspace; reuse after reconnecting or for separate logical agents."
+          }
+        },
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "wangp_sessionDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "wangp_workspace",
+      "description": "Agent workspaces: current returns/resumes your assignment; list queries the workspaces you may use (your own, and the user's unless the user restricted it); create starts an independent context (storage_mode: dedicated keeps its media in its own folder, shared in the common output folders; the configured default otherwise); attach creates a context for an existing workspace_id. Pass the returned agent_context on media, IO, job and session calls, especially after reconnecting or when multiplexing agents. Current shared-user permissions permit discovery/attachment; per-user visibility and cancellation rights are not implemented.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "default": "current",
+            "enum": [
+              "current",
+              "list",
+              "create",
+              "attach"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "name": {
+            "default": "MCP Agent",
+            "title": "Name",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Workspace Id"
+          },
+          "agent_context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Agent Context"
+          },
+          "query": {
+            "default": "",
+            "title": "Query",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "storage_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "shared",
+                  "dedicated"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Storage Mode"
+          }
+        },
+        "title": "wangp_workspaceArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "wangp_workspaceDictOutput",
+        "type": "object"
+      }
+    }
+  ],
+  "note": "Schema snapshot only; perform runtime discovery. No sessions or user contexts included.",
+  "engine_commit": "fdc63bdf89358fb13c93cf6b38693fd89a859f00",
+  "source": "WanGP MCP tools/list"
+}

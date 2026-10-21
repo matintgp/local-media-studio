@@ -1,0 +1,22 @@
+{
+  "mode": "mock",
+  "locale": "fa",
+  "bind_host": "127.0.0.1",
+  "port": 8787,
+  "data_root": "B:/MediaStudio",
+  "minimum_free_space_gib": 60,
+  "gpu_concurrency": 1,
+  "engines": {
+    "comfy": {
+      "base_url": "http://127.0.0.1:8188",
+      "output_root": null,
+      "template_id": "z-image-turbo-nunchaku"
+    },
+    "wan": {
+      "mcp_url": "http://127.0.0.1:7866/mcp",
+      "output_root": null
+    }
+  },
+  "ffmpeg_path": null,
+  "provider": { "enabled": false, "kind": "none" }
+}

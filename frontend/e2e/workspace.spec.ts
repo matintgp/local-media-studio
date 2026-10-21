@@ -82,11 +82,11 @@ test('Persian mock project, queue, gallery, composer, English switch',async({pag
  await page.getByLabel('Assistant message').fill('Plan image and speech');
  await page.getByRole('button',{name:'Send',exact:true}).click();
  await expect(page.getByLabel('Plan prompt 1')).toHaveValue('Synthetic courtyard');
- const before=await page.request.get('/api/jobs').then(r=>r.json());
+ const before=await page.request.get('/api/jobs?project_id='+projectId).then(r=>r.json());
  await page.getByLabel('Plan prompt 1').fill('Reviewed synthetic courtyard');
  await page.getByRole('button',{name:'Approve and queue plan',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Queue',exact:true})).toBeVisible();
- await expect.poll(async()=>{const j=await page.request.get('/api/jobs').then(r=>r.json());return j.length-before.length}).toBe(2);
+ await expect.poll(async()=>{const j=await page.request.get('/api/jobs?project_id='+projectId).then(r=>r.json());return j.length-before.length}).toBe(2);
  await page.getByRole('button',{name:/Assistant/}).click();
  await page.getByRole('button',{name:'Switch language'}).click();
  await page.screenshot({path:'../docs/screenshots/assistant-fa.png',fullPage:true});

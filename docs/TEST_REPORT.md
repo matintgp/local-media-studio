@@ -1,6 +1,6 @@
 # Verification report — CPU mock sandbox (2026-10-21)
 
-**Status: incomplete MVP; owner GPU checks have not run.** Implementation changes are proposed on a separate feature branch for review; they must not be merged before the remaining acceptance gates pass.
+**Historical cloud snapshot.** The checks below predate local Windows/GPU verification. See [LOCAL_REVIEW.md](LOCAL_REVIEW.md) for the subsequent fixes and actual on-device results. The PR remains separate from main for owner evaluation.
 
 ## Checks actually run
 
